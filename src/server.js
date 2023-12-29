@@ -1,5 +1,5 @@
 import http from "http";
-import WebSocket from "ws";
+import SocketIO from "socket.io";
 import express from "express";
 
 const app = express();
@@ -10,17 +10,50 @@ app.use("/public", express.static(__dirname + "/public"));
 app.get("/", (req, res) => res.render("home"));
 app.get("/*", (req, res) => res.redirect("/"));
 
-const handleListen = () => console.log("3000 포트에서 실행 중...");
-
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const httpServer = http.createServer(app);
+const wsServer = SocketIO(httpServer);
+// const wss = new WebSocket.Server({ server });
 
 function onSocketClose() {
   console.log("Disconnected from the Browser ❌");
 }
 
-const sockets = [];
+wsServer.on("connection", (socket) => {
+  socket["nickname"] = "Anon"; // 소켓 연결시 닉네임 익명으로 설정
 
+  // 소켓이 모든 이벤트에 대하여 아래 코드 실행
+  socket.onAny((event) => {
+    console.log(`Socket Event: ${event}`);
+  });
+
+  // 소켓이 "enter_room" 이벤트에 대하여 아래 코드 실행
+  socket.on("enter_room", (roomName, done) => {
+    socket.join(roomName);
+    done(); // 프론트엔드에서 done 함수가 실행된다.
+    socket.to(roomName).emit("welcome", socket.nickname);
+  });
+
+  // 소켓이 "disconnecting" 이벤트(연결이 끊어졌을 때)에 대하여 아래 코드 실행
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((room) => {
+      socket.to(room).emit("bye", socket.nickname);
+    });
+  });
+
+  // 소켓이 "new_message" 이벤트에 대하여 아래 코드 실행
+  socket.on("new_message", (msg, room, done) => {
+    socket.to(room).emit("new_message", `${socket.nickname}: ${msg}`);
+    done();
+  });
+
+  // 소켓이 "nickname" 이벤트에 대하여 아래 코드 실행
+  socket.on("nickname", (nickname) => {
+    socket["nickname"] = nickname;
+  });
+});
+
+/*
+const sockets = [];
 wss.on("connection", (socket) => {
   sockets.push(socket);
   socket["nickname"] = "Anon";
@@ -40,5 +73,7 @@ wss.on("connection", (socket) => {
     }
   });
 });
+*/
 
-server.listen(3000, handleListen);
+const handleListen = () => console.log("3000 포트에서 실행 중...");
+httpServer.listen(3000, handleListen);
