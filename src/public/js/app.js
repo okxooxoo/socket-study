@@ -44,7 +44,7 @@ function handleMessageSubmit(event) {
 
 /**
  * 채팅방 제목 설정 및
- * 메시지 전송 버튼에 이벤트 리스너 부착
+ * 메시지/닉네임 전송 버튼에 이벤트 리스너 부착
  */
 function showRoom() {
     welcome.hidden = true;
@@ -70,12 +70,39 @@ function handleRoomSubmit(event) {
 
 form.addEventListener("submit", handleRoomSubmit);
 
-socket.on("welcome", (user) => {
+/**
+ * 서버로부터 받은 "welcome" 이벤트(새로운 유저가 방에 입장)에 대한 처리를 한다.
+ */
+socket.on("welcome", (user, newCount) => {
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
     addMessage(`${user} arrived!`);
 });
 
-socket.on("bye", (user) => {
+/**
+ * 서버로부터 받은 "bye" 이벤트(유저가 방에서 떠남)에 대한 처리를 한다.
+ */
+socket.on("bye", (user, newCount) => {
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
     addMessage(`${user} left ㅠㅠ`);
 });
 
+/**
+ * 서버로부터 받은 "new_message" 이벤트(다른 유저가 메시지 전송)에 대한 처리를 한다.
+ */
 socket.on("new_message", addMessage);
+
+/**
+ * 서버로부터 받은 "room_change" 이벤트(현재 개설된 공개방 리스트에 변화가 생김)에 대한 처리를 한다.
+ */
+socket.on("room_change", (rooms) => {
+    const roomList = welcome.querySelector("ul");
+    roomList.innerHTML = "";
+
+    rooms.forEach((room) => {
+        const li = document.createElement("li");
+        li.innerText = room;
+        roomList.appendChild(li);
+    });
+});

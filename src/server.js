@@ -12,10 +12,34 @@ app.get("/*", (req, res) => res.redirect("/"));
 
 const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
-// const wss = new WebSocket.Server({ server });
 
 function onSocketClose() {
   console.log("Disconnected from the Browser ❌");
+}
+
+/**
+ * 공개방 리스트를 반환하는 함수
+ */
+function publicRooms() {
+  const {
+    sockets: {
+      adapter: { sids, rooms },
+    },
+  } = wsServer;
+  const publicRooms = [];
+  rooms.forEach((_, key) => {
+    if (sids.get(key) === undefined) {
+      publicRooms.push(key);
+    }
+  });
+  return publicRooms;
+}
+
+/**
+ * 방의 인원수를 반환하는 함수
+ */
+function countRoom(roomName) {
+  return wsServer.sockets.adapter.rooms.get(roomName)?.size;
 }
 
 wsServer.on("connection", (socket) => {
@@ -30,14 +54,20 @@ wsServer.on("connection", (socket) => {
   socket.on("enter_room", (roomName, done) => {
     socket.join(roomName);
     done(); // 프론트엔드에서 done 함수가 실행된다.
-    socket.to(roomName).emit("welcome", socket.nickname);
+    socket.to(roomName).emit("welcome", socket.nickname, countRoom(roomName));
+    wsServer.sockets.emit("room_change", publicRooms());
   });
 
-  // 소켓이 "disconnecting" 이벤트(연결이 끊어졌을 때)에 대하여 아래 코드 실행
+  // 소켓이 "disconnecting" 이벤트(연결이 끊어지기 직전)에 대하여 아래 코드 실행
   socket.on("disconnecting", () => {
     socket.rooms.forEach((room) => {
-      socket.to(room).emit("bye", socket.nickname);
+      socket.to(room).emit("bye", socket.nickname, countRoom(room) - 1);
     });
+  });
+
+  // 소켓이 "disconnect" 이벤트(연결이 끊어진 후)에 대하여 아래 코드 실행
+  socket.on("disconnect", () => {
+    wsServer.sockets.emit("room_change", publicRooms());
   });
 
   // 소켓이 "new_message" 이벤트에 대하여 아래 코드 실행
@@ -51,29 +81,6 @@ wsServer.on("connection", (socket) => {
     socket["nickname"] = nickname;
   });
 });
-
-/*
-const sockets = [];
-wss.on("connection", (socket) => {
-  sockets.push(socket);
-  socket["nickname"] = "Anon";
-  console.log("Connected to Browser ✅");
-  socket.on("close", onSocketClose);
-  socket.on("message", (msg) => {
-    const message = JSON.parse(msg);
-    switch (message.type) {
-      case "new_message":
-        sockets.forEach((aSocket) =>
-          aSocket.send(`${socket.nickname}: ${message.payload}`)
-        );
-        break;
-      case "nickname":
-        socket["nickname"] = message.payload;
-        break;
-    }
-  });
-});
-*/
 
 const handleListen = () => console.log("3000 포트에서 실행 중...");
 httpServer.listen(3000, handleListen);
